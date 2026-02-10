@@ -1,43 +1,36 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, send_file
 import yt_dlp
 import os
+import uuid
 
 app = Flask(__name__)
 
-@app.route("/")
-def home():
-    return "Backend FB Video Downloader is running"
+DOWNLOAD_DIR = "videos"
+os.makedirs(DOWNLOAD_DIR, exist_ok=True)
 
 @app.route("/download", methods=["POST"])
 def download():
-    try:
-        data = request.get_json()
-        if not data or "url" not in data:
-            return jsonify({"error": "Missing url"}), 400
+    data = request.get_json()
+    fb_url = data.get("url")
 
-        fb_url = data["url"]
+    filename = f"{uuid.uuid4()}.mp4"
+    filepath = os.path.join(DOWNLOAD_DIR, filename)
 
-        ydl_opts = {
-            "quiet": True,
-            "skip_download": True,
-            "format": "best",
-        }
+    ydl_opts = {
+        "outtmpl": filepath,
+        "format": "best",
+        "quiet": True
+    }
 
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            info = ydl.extract_info(fb_url, download=False)
-            video_url = info.get("url")
+    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+        ydl.download([fb_url])
 
-        if not video_url:
-            return jsonify({"error": "Cannot extract video url"}), 400
-
-        return jsonify({"video_url": video_url})
-
-    except Exception as e:
-        print("ERROR:", e)
-        return jsonify({"error": str(e)}), 500
+    return jsonify({
+        "download_url": f"https://backend-fb-vd.onrender.com/file/{filename}"
+    })
 
 
-# 🔴 CỰC KỲ QUAN TRỌNG CHO RENDER
-if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 10000))
-    app.run(host="0.0.0.0", port=port)
+@app.route("/file/<name>")
+def serve_file(name):
+    path = os.path.join(DOWNLOAD_DIR, name)
+    return send_file(path, as_attachment=True)
